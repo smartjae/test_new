@@ -1,8 +1,8 @@
 # 주요 패키지
 streamlit==1.35.0
-tensorflow==2.12.0
+tensorflow==2.13.0
 opencv-python-headless==4.9.0.80
-mediapipe==0.10.5
+mediapipe==0.10.9
 Pillow==10.3.0
 scikit-learn==1.4.2
 matplotlib==3.8.4
