@@ -4,10 +4,44 @@ from datetime import datetime
 from PIL import Image
 from app_streaming import run_emotion_analysis
 import streamlit.components.v1 as components
+# ① webrtc 관련 import
+from streamlit_webrtc import webrtc_streamer, VideoProcessorBase
+import av
 
 # ——— Page config & title ———
 st.set_page_config(layout='wide', page_title='ethicapp')
 st.title('감정을 읽는 기계')
+
+
+# ② VideoProcessorBase 상속 클래스 정의
+class EmotionProcessor(VideoProcessorBase):
+    def __init__(self):
+        # 필요하면 초기화할 변수 설정
+        pass
+
+    def recv(self, frame: av.VideoFrame) -> av.VideoFrame:
+        # 1) 프레임을 numpy 배열로 변환
+        img = frame.to_ndarray(format="bgr24")
+        # 2) 감정 분석 함수 호출
+        result = run_emotion_analysis(img)
+        # TODO: result를 img 위에 그리거나 로그에 출력
+        # 예: cv2.putText(img, result, (10,30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,0,0), 2)
+        # 3) 다시 VideoFrame으로 변환해 반환
+        return av.VideoFrame.from_ndarray(img, format="bgr24")
+
+# ③ webrtc_streamer 실행
+webrtc_streamer(
+    key="emotion",
+    video_processor_factory=EmotionProcessor,
+    rtc_configuration={  # 필요하면 STUN/TURN 서버 설정
+        "iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]
+    },
+    media_stream_constraints={"video": True, "audio": False},
+)
+
+
+
+
 
 # ——— Sidebar navigation menu ———
 st.sidebar.subheader('Menu …')
