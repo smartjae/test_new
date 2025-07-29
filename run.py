@@ -1,4 +1,4 @@
-!pip install --upgrade pip
+
 import streamlit as st
 from datetime import datetime
 from PIL import Image
