@@ -1,8 +1,25 @@
+# requirements.txt
+
+# 1) Streamlit
 streamlit==1.35.0
+
+# 2) Rich (Streamlit 의존성 충족)
 rich>=10.14.0,<14
+
+# 3) OpenCV (GUI 없는 서버용)
 opencv-python-headless==4.7.0.72
+
+# 4) MediaPipe
 mediapipe==0.10.21
+
+# 5) TensorFlow
 tensorflow==2.12.0
+
+# 6) NumPy: TF 2.12.0 호환 범위로 낮춤
+numpy>=1.22,<1.24
+
+# 7) Protobuf (Streamlit·MediaPipe 공통 의존성 해소)
 protobuf>=4.25.3,<5
-numpy==1.24.3
+
+# 8) 기타 이미지 처리
 Pillow==9.5.0
