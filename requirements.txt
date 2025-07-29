@@ -23,3 +23,11 @@ protobuf>=4.25.3,<5
 
 # 8) 기타 이미지 처리
 Pillow==9.5.0
+
+
+
+# WebRTC 스트리밍
+streamlit-webrtc
+
+# 비디오 인코딩/디코딩
+av
