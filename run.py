@@ -42,18 +42,6 @@ class EmotionProcessor(VideoProcessorBase):
         # 4) 다시 VideoFrame으로 변환해 반환
         return av.VideoFrame.from_ndarray(img, format="bgr24")
 
-# ③ webrtc_streamer 실행 (async_processing=True 추가)
-webrtc_streamer(
-    key="emotion",
-    video_processor_factory=EmotionProcessor,
-    async_processing=True,               # ← 여기에 추가하세요
-    media_stream_constraints={"video": True, "audio": False},
-    rtc_configuration={
-        "iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]
-    },
-)
-
-
 
 # ——— Sidebar navigation menu ———
 st.sidebar.subheader('Menu …')
@@ -127,29 +115,48 @@ elif page == 'Teachable Machine':
 
 
 elif page == 'Emotion Analysis':
-    # 먼저 오른쪽에 사용법을 보여줍니다.
+     # 좌우 컬럼으로 레이아웃 분할
+    left_col, right_col = st.columns([2, 1])
+
+    # 오른쪽: 사용법 안내
     with right_col:
         st.subheader('How to use')
         st.markdown(
             '''
 - 웹캠을 통해 실시간으로 얼굴을 감지하고 감정을 예측합니다.  
 - 브라우저에서 카메라 권한을 허용해 주세요.  
-- 여러 가지 표정으로 테스트해 보세요.
+- 다양한 표정으로 테스트해 보세요.
             '''
         )
 
-     # 왼쪽: 시작/중단 버튼 및 분석, 피드백 폼
+    # 왼쪽: 스트리밍 제어 및 피드백 폼
     with left_col:
-        btn1, btn2 = st.columns(2)
-        if btn1.button('Start Emotion Analysis'):
-            st.session_state['emotion_running'] = True
-        if btn2.button('Stop Emotion Analysis'):
+        # 세션 상태 초기화
+        if 'emotion_running' not in st.session_state:
             st.session_state['emotion_running'] = False
 
-        # 감정 분석 실행 또는 정지
-        if st.session_state.get('emotion_running'):
-            run_emotion_analysis()
+        # 시작/중단 버튼
+        btn_start, btn_stop = st.columns(2)
+        if btn_start.button('Start Emotion Analysis'):
+            st.session_state['emotion_running'] = True
+        if btn_stop.button('Stop Emotion Analysis'):
+            st.session_state['emotion_running'] = False
 
+        # 스트리밍 실행 또는 중단
+        if st.session_state['emotion_running']:
+            webrtc_streamer(
+                key="emotion",
+                video_processor_factory=EmotionProcessor,
+                async_processing=True,
+                media_stream_constraints={"video": True, "audio": False},
+                rtc_configuration={
+                    "iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]
+                },
+            )
+        else:
+            st.info("▶️ Emotion Analysis is stopped")
+
+        # 학생 피드백 기록
         st.subheader('학생 피드백 기록')
         student_name = st.text_input('학번')
         incorrect = st.text_area('잘못 인식된 감정', height=100)
@@ -166,7 +173,6 @@ elif page == 'Emotion Analysis':
                     st.error(f'Error saving feedback: {e}')
             else:
                 st.warning('모든 필드를 입력한 후 제출해주세요.')
-
 
 
 
