@@ -164,17 +164,43 @@ button[title=\"Stop\"] {display: none !important;}
             # Toggle streaming state
             st.session_state["emotion_running"] = not st.session_state["emotion_running"]
 
-        # Streaming control
+        # Streaming control: record for a fixed duration and then analyze
         if st.session_state["emotion_running"]:
-            webrtc_streamer(
-                key="emotion",
+            from streamlit_webrtc import WebRtcMode
+            # SENDONLY 모드로 녹화
+            webrtc_ctx = webrtc_streamer(
+                key="emotion_recorder",
                 video_processor_factory=EmotionProcessor,
+                mode=WebRtcMode.SENDONLY,
                 async_processing=True,
                 media_stream_constraints={"video": True, "audio": False},
                 rtc_configuration={"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]},
             )
+            st.info("녹화를 시작합니다... 5초 동안 얼굴 표정을 녹화합니다.")
+            frames = []
+            # 5초 동안 녹화 (FPS 약 10으로 가정, 50프레임)
+            for _ in range(50):
+                if webrtc_ctx.video_receiver:
+                    frame = webrtc_ctx.video_receiver.get_frame(timeout=1)
+                    if frame is not None:
+                        frames.append(frame.to_ndarray(format="bgr24"))
+            st.session_state["emotion_running"] = False
+
+            # 녹화된 프레임 분석
+            st.subheader("녹화 후 감정 분석 결과")
+            results = []
+            for img in frames:
+                img_resized = cv2.resize(img, (48, 48))
+                gray = cv2.cvtColor(img_resized, cv2.COLOR_BGR2GRAY)
+                arr = gray.astype("float32") / 255.0
+                arr = np.expand_dims(arr, axis=(0, -1))
+                preds = EmotionProcessor().model.predict(arr)
+                pred_id = int(np.argmax(preds, axis=1)[0])
+                pred_label = EmotionProcessor().label_map[str(pred_id)]
+                results.append(pred_label)
+            st.write(results)
         else:
-            st.info("▶️ Emotion Analysis is stopped")
+            st.info("▶️ 감정 분석을 위해 START 버튼을 눌러 녹화를 시작하세요.")
 
         # Feedback form
         st.subheader("학생 피드백 기록")
