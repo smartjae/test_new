@@ -6,22 +6,21 @@ import av
 import cv2
 import numpy as np
 import mediapipe as mp
-from mediapipe.python.solutions.drawing_utils import draw_landmarks
-from mediapipe.python.solutions.drawing_styles import get_default_face_mesh_styles
+from mediapipe.solutions import drawing_utils as mp_drawing, drawing_styles as mp_styles, face_mesh as mp_face_mesh
 
 # ——— Page config & title ———
 st.set_page_config(layout='wide', page_title='ethicapp')
 st.title('감정을 읽는 기계')
 
-# EmotionProcessor 정의
+# Video processor for real-time emotion and face mesh
 class EmotionProcessor(VideoProcessorBase):
     def __init__(self):
-        # 모델과 라벨 맵 로드
+        # Load label map and model once
         label_map, model = load_emotion_model()
         self.label_map = label_map
         self.model = model
-        # MediaPipe Face Mesh 초기화
-        self.face_mesh = mp.solutions.face_mesh.FaceMesh(
+        # Initialize MediaPipe Face Mesh
+        self.face_mesh = mp_face_mesh.FaceMesh(
             static_image_mode=False,
             max_num_faces=1,
             refine_landmarks=True,
@@ -30,30 +29,31 @@ class EmotionProcessor(VideoProcessorBase):
         )
 
     def recv(self, frame: av.VideoFrame) -> av.VideoFrame:
-        # 프레임 -> BGR ndarray
+        # Convert VideoFrame to ndarray
         img = frame.to_ndarray(format="bgr24")
-        # FaceMesh 처리 (RGB 변환)
+        # FaceMesh processing
         rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         results = self.face_mesh.process(rgb)
-        # 랜드마크 그리기
         if results.multi_face_landmarks:
             for lm in results.multi_face_landmarks:
-                draw_landmarks(
+                # Draw mesh connections
+                mp_drawing.draw_landmarks(
                     image=img,
                     landmark_list=lm,
-                    connections=mp.solutions.face_mesh.FACE_CONNECTIONS,
-                    landmark_drawing_spec=None,
-                    connection_drawing_spec=get_default_face_mesh_styles()[1]
+                    connections=mp_face_mesh.FACE_CONNECTIONS,
+                    landmark_drawing_spec=mp_styles.get_default_face_mesh_tesselation_style(),
+                    connection_drawing_spec=mp_styles.get_default_face_mesh_tesselation_style()
                 )
-        # 감정 분석: 전처리 (모델 입력 형태 맞추기)
+        # Emotion analysis preprocessing (48x48 grayscale)
         img_resized = cv2.resize(img, (48, 48))
         gray = cv2.cvtColor(img_resized, cv2.COLOR_BGR2GRAY)
-        arr = gray.astype('float32') / 255.0
-        arr = np.expand_dims(arr, axis=(0, -1))  # (1,48,48,1)
+        arr = gray.astype("float32") / 255.0
+        arr = np.expand_dims(arr, axis=(0, -1))
+        # Predict emotion
         preds = self.model.predict(arr)
         pred_id = int(np.argmax(preds, axis=1)[0])
         pred_label = self.label_map[str(pred_id)]
-        # 예측 결과 텍스트 오버레이
+        # Overlay text
         cv2.putText(
             img,
             pred_label,
@@ -63,8 +63,8 @@ class EmotionProcessor(VideoProcessorBase):
             (0, 255, 0),
             2
         )
-        # VideoFrame으로 반환
         return av.VideoFrame.from_ndarray(img, format="bgr24")
+
 
 
 # ——— Sidebar navigation menu ———
@@ -129,7 +129,7 @@ elif page == 'Emotion Analysis':
     left_col, right_col = st.columns([2, 1])
 
     with right_col:
-        st.subheader('How to use')
+        st.subheader("How to use")
         st.markdown(
             '''
 - 웹캠 얼굴에 MediaPipe FaceMesh를 적용하고 실시간 감정을 예측합니다.  
@@ -139,50 +139,47 @@ elif page == 'Emotion Analysis':
         )
 
     with left_col:
-        # 상태 초기화
-        if 'emotion_running' not in st.session_state:
-            st.session_state['emotion_running'] = False
+        # Initialize session state
+        if "emotion_running" not in st.session_state:
+            st.session_state["emotion_running"] = False
 
-        # 시작/중단 버튼
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button('Start Emotion Analysis'):
-                st.session_state['emotion_running'] = True
-        with col2:
-            if st.button('Stop Emotion Analysis'):
-                st.session_state['emotion_running'] = False
+        # Control buttons
+        start_btn, stop_btn = st.columns(2)
+        if start_btn.button("Start Emotion Analysis"):
+            st.session_state["emotion_running"] = True
+        if stop_btn.button("Stop Emotion Analysis"):
+            st.session_state["emotion_running"] = False
 
-        # 스트리밍 및 처리
-        if st.session_state['emotion_running']:
+        # Start or stop streaming
+        if st.session_state["emotion_running"]:
             webrtc_streamer(
                 key="emotion",
                 video_processor_factory=EmotionProcessor,
                 async_processing=True,
                 media_stream_constraints={"video": True, "audio": False},
-                rtc_configuration={
-                    "iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]
-                },
+                rtc_configuration={"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]},
             )
         else:
             st.info("▶️ Emotion Analysis is stopped")
 
-        # 학생 피드백 폼
-        st.subheader('학생 피드백 기록')
-        student_name = st.text_input('학번')
-        incorrect = st.text_area('잘못 인식된 감정', height=100)
-        reason = st.text_area('이유', height=100)
-        if st.button('Submit Feedback'):
+        # Feedback form
+        st.subheader("학생 피드백 기록")
+        student_name = st.text_input("학번")
+        incorrect = st.text_area("잘못 인식된 감정", height=100)
+        reason = st.text_area("이유", height=100)
+        if st.button("Submit Feedback"):
             if student_name and incorrect and reason:
-                ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                entry = f'[{ts}] {student_name} | {incorrect} | {reason}\n'
+                ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                entry = f"[{ts}] {student_name} | {incorrect} | {reason}\n"
                 try:
-                    with open('analyze.txt', 'a', encoding='utf-8') as f:
+                    with open("analyze.txt", "a", encoding="utf-8") as f:
                         f.write(entry)
-                    st.success('Feedback submitted!')
+                    st.success("Feedback submitted!")
                 except Exception as e:
-                    st.error(f'Error saving feedback: {e}')
+                    st.error(f"Error saving feedback: {e}")
             else:
-                st.warning('모든 필드를 입력해주세요.')
+                st.warning("모든 필드를 입력해주세요.")
+
 
 
 
