@@ -6,7 +6,11 @@ import av
 import cv2
 import numpy as np
 import mediapipe as mp
-from mediapipe.solutions import drawing_utils as mp_drawing, drawing_styles as mp_styles, face_mesh as mp_face_mesh
+# mediapipe 솔루션 모듈 정의
+mp_drawing = mp.solutions.drawing_utils
+mp_styles = mp.solutions.drawing_styles
+mp_face_mesh = mp.solutions.face_mesh
+
 
 # ——— Page config & title ———
 st.set_page_config(layout='wide', page_title='ethicapp')
