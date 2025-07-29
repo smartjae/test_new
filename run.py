@@ -143,6 +143,17 @@ elif page == 'Emotion Analysis':
         )
 
     with left_col:
+        # Hide default WebRTC start/stop buttons
+        st.markdown(
+            """
+<style>
+button[title=\"Start\"] {display: none !important;}
+button[title=\"Stop\"] {display: none !important;}
+</style>
+            """,
+            unsafe_allow_html=True
+        )
+
         # Initialize session state
         if "emotion_running" not in st.session_state:
             st.session_state["emotion_running"] = False
@@ -182,7 +193,6 @@ elif page == 'Emotion Analysis':
                     st.error(f"Error saving feedback: {e}")
             else:
                 st.warning("모든 필드를 입력해주세요.")
-
 
 
 
