@@ -1,26 +1,26 @@
-
 import streamlit as st
 from datetime import datetime
-from PIL import Image
-from app_streaming import run_emotion_analysis
-import streamlit.components.v1 as components
-# ① webrtc 관련 import
+from app_streaming import load_emotion_model
 from streamlit_webrtc import webrtc_streamer, VideoProcessorBase
 import av
+import cv2
+import numpy as np
+import mediapipe as mp
+from mediapipe.python.solutions.drawing_utils import draw_landmarks
+from mediapipe.python.solutions.drawing_styles import get_default_face_mesh_styles
 
 # ——— Page config & title ———
 st.set_page_config(layout='wide', page_title='ethicapp')
 st.title('감정을 읽는 기계')
 
-# ① 필요한 임포트 (최상단에 있어야 합니다)
-from streamlit_webrtc import webrtc_streamer, VideoProcessorBase
-import av
-
-# EmotionProcessor 정의 (상단에 위치)
+# EmotionProcessor 정의
 class EmotionProcessor(VideoProcessorBase):
     def __init__(self):
-        # 모델과 Face Mesh 솔루션을 한 번만 로드
-        self.model = load_emotion_model()
+        # 모델과 라벨 맵 로드
+        label_map, model = load_emotion_model()
+        self.label_map = label_map
+        self.model = model
+        # MediaPipe Face Mesh 초기화
         self.face_mesh = mp.solutions.face_mesh.FaceMesh(
             static_image_mode=False,
             max_num_faces=1,
@@ -32,32 +32,38 @@ class EmotionProcessor(VideoProcessorBase):
     def recv(self, frame: av.VideoFrame) -> av.VideoFrame:
         # 프레임 -> BGR ndarray
         img = frame.to_ndarray(format="bgr24")
-        # Face Mesh 처리: BGR -> RGB
+        # FaceMesh 처리 (RGB 변환)
         rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         results = self.face_mesh.process(rgb)
-        # 랜드마크가 감지되면 그리기
+        # 랜드마크 그리기
         if results.multi_face_landmarks:
-            for face_landmarks in results.multi_face_landmarks:
+            for lm in results.multi_face_landmarks:
                 draw_landmarks(
                     image=img,
-                    landmark_list=face_landmarks,
+                    landmark_list=lm,
                     connections=mp.solutions.face_mesh.FACE_CONNECTIONS,
                     landmark_drawing_spec=None,
                     connection_drawing_spec=get_default_face_mesh_styles()[1]
                 )
-        # 감정 분석 실행
-        result = self.model.predict(img)
+        # 감정 분석: 전처리 (모델 입력 형태 맞추기)
+        img_resized = cv2.resize(img, (48, 48))
+        gray = cv2.cvtColor(img_resized, cv2.COLOR_BGR2GRAY)
+        arr = gray.astype('float32') / 255.0
+        arr = np.expand_dims(arr, axis=(0, -1))  # (1,48,48,1)
+        preds = self.model.predict(arr)
+        pred_id = int(np.argmax(preds, axis=1)[0])
+        pred_label = self.label_map[str(pred_id)]
         # 예측 결과 텍스트 오버레이
         cv2.putText(
             img,
-            result,
+            pred_label,
             (10, img.shape[0] - 20),
             cv2.FONT_HERSHEY_SIMPLEX,
             1,
             (0, 255, 0),
             2
         )
-        # VideoFrame으로 변환 후 반환
+        # VideoFrame으로 반환
         return av.VideoFrame.from_ndarray(img, format="bgr24")
 
 
@@ -126,25 +132,27 @@ elif page == 'Emotion Analysis':
         st.subheader('How to use')
         st.markdown(
             '''
-- 웹캠으로 얼굴을 실시간 감지하며 Facemesh를 그립니다.  
-- 브라우저에서 카메라 권한을 허용해 주세요.  
-- Start 버튼 클릭 시 스트리밍이 시작됩니다.
+- 웹캠 얼굴에 MediaPipe FaceMesh를 적용하고 실시간 감정을 예측합니다.  
+- 브라우저에서 카메라 권한을 허용하세요.  
+- Start/Stop 버튼으로 스트리밍을 제어합니다.
             '''
         )
 
     with left_col:
-        # 세션 상태 초기화
+        # 상태 초기화
         if 'emotion_running' not in st.session_state:
             st.session_state['emotion_running'] = False
 
-        # 스트리밍 제어 버튼
-        btn_start, btn_stop = st.columns(2)
-        if btn_start.button('Start Emotion Analysis'):
-            st.session_state['emotion_running'] = True
-        if btn_stop.button('Stop Emotion Analysis'):
-            st.session_state['emotion_running'] = False
+        # 시작/중단 버튼
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button('Start Emotion Analysis'):
+                st.session_state['emotion_running'] = True
+        with col2:
+            if st.button('Stop Emotion Analysis'):
+                st.session_state['emotion_running'] = False
 
-        # 스트리밍 및 분석
+        # 스트리밍 및 처리
         if st.session_state['emotion_running']:
             webrtc_streamer(
                 key="emotion",
@@ -158,15 +166,15 @@ elif page == 'Emotion Analysis':
         else:
             st.info("▶️ Emotion Analysis is stopped")
 
-        # 학생 피드백 기록
+        # 학생 피드백 폼
         st.subheader('학생 피드백 기록')
         student_name = st.text_input('학번')
         incorrect = st.text_area('잘못 인식된 감정', height=100)
         reason = st.text_area('이유', height=100)
         if st.button('Submit Feedback'):
-            if student_name.strip() and incorrect.strip() and reason.strip():
+            if student_name and incorrect and reason:
                 ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                entry = f'[{ts}] Student: {student_name} | Incorrect Analysis: {incorrect} | Reason: {reason}\n'
+                entry = f'[{ts}] {student_name} | {incorrect} | {reason}\n'
                 try:
                     with open('analyze.txt', 'a', encoding='utf-8') as f:
                         f.write(entry)
@@ -174,7 +182,7 @@ elif page == 'Emotion Analysis':
                 except Exception as e:
                     st.error(f'Error saving feedback: {e}')
             else:
-                st.warning('모든 필드를 입력한 후 제출해주세요.')
+                st.warning('모든 필드를 입력해주세요.')
 
 
 
