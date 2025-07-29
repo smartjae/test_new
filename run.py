@@ -138,7 +138,7 @@ elif page == 'Emotion Analysis':
             '''
 - 웹캠 얼굴에 MediaPipe FaceMesh를 적용하고 실시간 감정을 예측합니다.  
 - 브라우저에서 카메라 권한을 허용하세요.  
-- Start/Stop 버튼으로 스트리밍을 제어합니다.
+- "START" 버튼을 눌러 스트리밍을 시작/중단합니다.
             '''
         )
 
@@ -147,14 +147,13 @@ elif page == 'Emotion Analysis':
         if "emotion_running" not in st.session_state:
             st.session_state["emotion_running"] = False
 
-        # Control buttons
-        start_btn, stop_btn = st.columns(2)
-        if start_btn.button("Start Emotion Analysis"):
-            st.session_state["emotion_running"] = True
-        if stop_btn.button("Stop Emotion Analysis"):
-            st.session_state["emotion_running"] = False
+        # Toggle button label
+        btn_label = "STOP" if st.session_state["emotion_running"] else "START"
+        if st.button(btn_label, key="toggle-btn"):
+            # Toggle streaming state
+            st.session_state["emotion_running"] = not st.session_state["emotion_running"]
 
-        # Start or stop streaming
+        # Streaming control
         if st.session_state["emotion_running"]:
             webrtc_streamer(
                 key="emotion",
@@ -183,7 +182,6 @@ elif page == 'Emotion Analysis':
                     st.error(f"Error saving feedback: {e}")
             else:
                 st.warning("모든 필드를 입력해주세요.")
-
 
 
 
