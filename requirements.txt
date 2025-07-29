@@ -1,4 +1,5 @@
 # requirements.txt 예시
+pip == 25.1.1
 streamlit==1.35.0
 rich>=10.14.0,<14      # <-- 이 줄을 추가하거나, 이미 있으면 버전을 <14로 수정
 opencv-python-headless==4.7.0.72
