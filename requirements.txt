@@ -1,6 +1,9 @@
-streamlit==1.25.0
+# requirements.txt 예시
+streamlit==1.35.0
+rich>=10.14.0,<14      # <-- 이 줄을 추가하거나, 이미 있으면 버전을 <14로 수정
 opencv-python-headless==4.7.0.72
 mediapipe==0.8.10
 tensorflow==2.10.0
 numpy==1.24.3
 Pillow==9.5.0
+# (그 외 필요한 패키지)
