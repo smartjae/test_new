@@ -16,30 +16,48 @@ st.title('감정을 읽는 기계')
 from streamlit_webrtc import webrtc_streamer, VideoProcessorBase
 import av
 
-# ② VideoProcessorBase 상속 클래스 정의 (기존 pass 부분을 대체)
+# EmotionProcessor 정의 (상단에 위치)
 class EmotionProcessor(VideoProcessorBase):
     def __init__(self):
-        # 모델을 한 번만 로드하도록 변경
-        from app_streaming import load_emotion_model
+        # 모델과 Face Mesh 솔루션을 한 번만 로드
         self.model = load_emotion_model()
+        self.face_mesh = mp.solutions.face_mesh.FaceMesh(
+            static_image_mode=False,
+            max_num_faces=1,
+            refine_landmarks=True,
+            min_detection_confidence=0.5,
+            min_tracking_confidence=0.5
+        )
 
     def recv(self, frame: av.VideoFrame) -> av.VideoFrame:
-        # 1) 프레임을 numpy 배열로 변환
+        # 프레임 -> BGR ndarray
         img = frame.to_ndarray(format="bgr24")
-        # 2) 미리 로드된 모델로 예측
+        # Face Mesh 처리: BGR -> RGB
+        rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        results = self.face_mesh.process(rgb)
+        # 랜드마크가 감지되면 그리기
+        if results.multi_face_landmarks:
+            for face_landmarks in results.multi_face_landmarks:
+                draw_landmarks(
+                    image=img,
+                    landmark_list=face_landmarks,
+                    connections=mp.solutions.face_mesh.FACE_CONNECTIONS,
+                    landmark_drawing_spec=None,
+                    connection_drawing_spec=get_default_face_mesh_styles()[1]
+                )
+        # 감정 분석 실행
         result = self.model.predict(img)
-        # 3) 예측 결과를 화면에 오버레이 (원하는 위치/폰트/색상으로 조정 가능)
-        import cv2
+        # 예측 결과 텍스트 오버레이
         cv2.putText(
             img,
             result,
-            (10, 30),
+            (10, img.shape[0] - 20),
             cv2.FONT_HERSHEY_SIMPLEX,
             1,
-            (255, 0, 0),
-            2,
+            (0, 255, 0),
+            2
         )
-        # 4) 다시 VideoFrame으로 변환해 반환
+        # VideoFrame으로 변환 후 반환
         return av.VideoFrame.from_ndarray(img, format="bgr24")
 
 
@@ -78,19 +96,6 @@ if page == 'Home':
                 st.warning('생각을 입력한 후 제출해주세요.')
 
 
-        # thoughts = st.text_area('기계가 감정을 읽을 수 있을까?', height=150)
-        # if st.button('제출'):
-        #     if thoughts.strip():
-        #         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        #         entry = f'[{timestamp}] {thoughts}\n'
-        #         try:
-        #             with open('data.txt', 'a', encoding='utf-8') as f:
-        #                 f.write(entry)
-        #             st.success('생각이 성공적으로 제출되었습니다!')
-        #         except Exception as e:
-        #             st.error(f'제출 중 오류 발생: {e}')
-        #     else:
-        #         st.warning('생각을 입력한 후 제출해주세요.')
 
     with right_col:
         st.subheader('Tips & Help')
@@ -115,34 +120,31 @@ elif page == 'Teachable Machine':
 
 
 elif page == 'Emotion Analysis':
-     # 좌우 컬럼으로 레이아웃 분할
     left_col, right_col = st.columns([2, 1])
 
-    # 오른쪽: 사용법 안내
     with right_col:
         st.subheader('How to use')
         st.markdown(
             '''
-- 웹캠을 통해 실시간으로 얼굴을 감지하고 감정을 예측합니다.  
+- 웹캠으로 얼굴을 실시간 감지하며 Facemesh를 그립니다.  
 - 브라우저에서 카메라 권한을 허용해 주세요.  
-- 다양한 표정으로 테스트해 보세요.
+- Start 버튼 클릭 시 스트리밍이 시작됩니다.
             '''
         )
 
-    # 왼쪽: 스트리밍 제어 및 피드백 폼
     with left_col:
         # 세션 상태 초기화
         if 'emotion_running' not in st.session_state:
             st.session_state['emotion_running'] = False
 
-        # 시작/중단 버튼
+        # 스트리밍 제어 버튼
         btn_start, btn_stop = st.columns(2)
         if btn_start.button('Start Emotion Analysis'):
             st.session_state['emotion_running'] = True
         if btn_stop.button('Stop Emotion Analysis'):
             st.session_state['emotion_running'] = False
 
-        # 스트리밍 실행 또는 중단
+        # 스트리밍 및 분석
         if st.session_state['emotion_running']:
             webrtc_streamer(
                 key="emotion",
@@ -183,52 +185,6 @@ elif page == 'Emotion Analysis':
 
 
 
-
-
-    # 왼쪽에서 분석 및 피드백 폼 표시
-    # with left_col:
-    #     # 실시간 감정 분석 시작 버튼
-    #     if st.button('Start Emotion Analysis'):
-    #         run_emotion_analysis()
-    #     st.subheader('학생 피드백 기록')
-    #     student_name = st.text_input('Student')
-    #     incorrect = st.text_area('Incorrect Analysis', height=100)
-    #     reason = st.text_area('Reasons for Missing', height=100)
-    #     if st.button('Submit Feedback'):
-    #         if student_name.strip() and incorrect.strip() and reason.strip():
-    #             ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    #             entry = f'[{ts}] Student: {student_name} | Incorrect Analysis: {incorrect} | Reason: {reason}\n'
-    #             try:
-    #                 with open('analyze.txt', 'a', encoding='utf-8') as f:
-    #                     f.write(entry)
-    #                 st.success('Feedback submitted!')
-    #             except Exception as e:
-    #                 st.error(f'Error saving feedback: {e}')
-    #         else:
-    #             st.warning('모든 필드를 입력한 후 제출해주세요.')
-
-
-
-    # 왼쪽에서 감정 분석과 피드백 폼을 렌더링합니다.
-    # with left_col:
-    #     run_emotion_analysis()
-    #     # 학생 피드백 기록 폼
-    #     st.subheader('학생 피드백 기록')
-    #     student_name = st.text_input('Student')
-    #     incorrect = st.text_area('Incorrect Analysis', height=100)
-    #     reason = st.text_area('Reasons for Missing', height=100)
-    #     if st.button('Submit Feedback'):
-    #         if student_name.strip() and incorrect.strip() and reason.strip():
-    #             ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    #             entry = f'[{ts}] Student: {student_name} | Incorrect Analysis: {incorrect} | Reason: {reason}\n'
-    #             try:
-    #                 with open('analyze.txt', 'a', encoding='utf-8') as f:
-    #                     f.write(entry)
-    #                 st.success('Feedback submitted!')
-    #             except Exception as e:
-    #                 st.error(f'Error saving feedback: {e}')
-    #         else:
-    #             st.warning('모든 필드를 입력한 후 제출해주세요.')
 
 
 
@@ -280,21 +236,6 @@ elif page == 'Student Data':
 
 
 
-
-# elif page == '학생 데이터':
-#     with left_col:
-#         st.subheader('저장된 학생 데이터')
-#         try:
-#             with open('data.txt', 'r', encoding='utf-8') as f:
-#                 content = f.read()
-#             st.text_area('', content, height=300)
-#         except FileNotFoundError:
-#             st.error('data.txt 파일이 없습니다.')
-#         except Exception as e:
-#             st.error(f'데이터 불러오기 중 오류 발생: {e}')
-#     #(코드 개선 요구):학생이 작성한 analyze.txt저장된 데이터가 "student_name","incorrect","reason"을 컬럼명을 갖는 표로 출력된다. 표의 제목은 "감정 분석 결과"이다.
-#     with right_col:
-#         st.write('')  # 비어 있는 영역
 
 elif page == 'Help':
     with left_col:
