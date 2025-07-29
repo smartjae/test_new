@@ -12,34 +12,46 @@ import av
 st.set_page_config(layout='wide', page_title='ethicapp')
 st.title('감정을 읽는 기계')
 
+# ① 필요한 임포트 (최상단에 있어야 합니다)
+from streamlit_webrtc import webrtc_streamer, VideoProcessorBase
+import av
 
-# ② VideoProcessorBase 상속 클래스 정의
+# ② VideoProcessorBase 상속 클래스 정의 (기존 pass 부분을 대체)
 class EmotionProcessor(VideoProcessorBase):
     def __init__(self):
-        # 필요하면 초기화할 변수 설정
-        pass
+        # 모델을 한 번만 로드하도록 변경
+        from app_streaming import load_emotion_model
+        self.model = load_emotion_model()
 
     def recv(self, frame: av.VideoFrame) -> av.VideoFrame:
         # 1) 프레임을 numpy 배열로 변환
         img = frame.to_ndarray(format="bgr24")
-        # 2) 감정 분석 함수 호출
-        result = run_emotion_analysis(img)
-        # TODO: result를 img 위에 그리거나 로그에 출력
-        # 예: cv2.putText(img, result, (10,30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,0,0), 2)
-        # 3) 다시 VideoFrame으로 변환해 반환
+        # 2) 미리 로드된 모델로 예측
+        result = self.model.predict(img)
+        # 3) 예측 결과를 화면에 오버레이 (원하는 위치/폰트/색상으로 조정 가능)
+        import cv2
+        cv2.putText(
+            img,
+            result,
+            (10, 30),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            1,
+            (255, 0, 0),
+            2,
+        )
+        # 4) 다시 VideoFrame으로 변환해 반환
         return av.VideoFrame.from_ndarray(img, format="bgr24")
 
-# ③ webrtc_streamer 실행
+# ③ webrtc_streamer 실행 (async_processing=True 추가)
 webrtc_streamer(
     key="emotion",
     video_processor_factory=EmotionProcessor,
-    rtc_configuration={  # 필요하면 STUN/TURN 서버 설정
+    async_processing=True,               # ← 여기에 추가하세요
+    media_stream_constraints={"video": True, "audio": False},
+    rtc_configuration={
         "iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]
     },
-    media_stream_constraints={"video": True, "audio": False},
 )
-
-
 
 
 
